@@ -1,0 +1,1112 @@
+
+module pipelined_processor_core (clk, rst);
+
+input clk, rst;
+
+//////////////////////// WIRES OF ALL MODULES ///////////////////////////////
+
+//PC
+wire [31:0] pc_in, pc_out;
+
+
+//i_mem
+wire [31:0] instr;
+
+//IF_ID
+wire flush;
+wire [31:0] instr_IF_ID_out;
+wire [31:0] pc_IF_ID_out;
+
+//inst_decode
+wire [31:0] imm;
+wire [6:0] opcode, func7;
+wire [2:0] func3;
+wire [4:0] rs1,rs2,rd;
+
+//regFile
+wire [31:0] rout1, rout2;
+wire [31:0] reg_inp_data;
+wire  regWE;
+
+//CU
+wire [3:0]alu_op;
+wire MR, MW, beq, bneq, bge, blt, jmp, MemtoReg, aluSrc;
+
+
+//ID_EX
+wire MR_ID_EX_out, MW_ID_EX_out, MemtoReg_ID_EX_out, regWE_ID_EX_out, beq_ID_EX_out, bneq_ID_EX_out, bge_ID_EX_out, blt_ID_EX_out, jmp_ID_EX_out, aluSrc_ID_EX_out;
+wire [6:0] opcode_ID_EX_out, func7_ID_EX_out;
+wire [31:0] pc_ID_EX_out, imm_ID_EX_out, rout1_ID_EX_out, rout2_ID_EX_out;
+wire [2:0] func3_ID_EX_out;
+wire [4:0] rs1_ID_EX_out, rs2_ID_EX_out, rd_ID_EX_out;
+wire [3:0] alu_op_ID_EX_out;
+
+//ALU
+wire [31:0] Result;
+wire [31:0] B;
+
+//EX_MEM
+wire MR_EX_MEM_out, MW_EX_MEM_out,MemtoReg_EX_MEM_out, jmp_EX_MEM_out, beq_EX_MEM_out , bneq_EX_MEM_out , bge_EX_MEM_out , blt_EX_MEM_out , regWE_EX_MEM_out;
+wire [4:0] rd_EX_MEM_out;
+wire [31:0] alu_result_EX_MEM_out, rout2_EX_MEM_out, pc_EX_MEM_out;
+
+//data_mem
+wire re; 
+wire [31:0] read_mem_data;
+
+//MEM_WB
+wire MemtoReg_MEM_WB_out, jmp_MEM_WB_out, regWE_MEM_WB_out;
+wire [4:0] rd_MEM_WB_out;
+wire [31:0] alu_result_MEM_WB_out, read_mem_data_MEM_WB_out, pc_MEM_WB_out;
+
+///// forwardingUnit
+wire [1:0] forward_A, forward_B;
+wire [31:0] FU_MUX_A, FU_MUX_B;
+
+
+//Extra wires for PC muxing
+wire branch_taken;
+wire [31:0] target_branch;
+/////////////////////////// INSTANTIATING MODULES ////////////////////////////
+
+
+////////////// FETCH STAGE /////////////////
+
+///// IF /////
+
+//PC muxing logic
+//assign pc_in = pc_out + 4;
+assign pc_in = (branch_taken || jmp_ID_EX_out) ? target_branch : pc_out + 4;
+
+//PC
+PC PC_inst (
+	.clk(clk),
+	.rst(rst),
+	.pc_in(pc_in),
+	.pc_out(pc_out),
+	.stall(stall)
+);
+
+//i_mem
+i_mem imem_inst (
+	.PC(pc_out),
+	.instr(instr)
+);
+
+
+///// IF_ID /////
+IF_ID IF_ID_inst (
+	.clk(clk),
+	.rst(rst),
+	.flush(flush),
+	.instr_in(instr),
+	.pc_in(pc_out),
+	.instr_out(instr_IF_ID_out),
+	.pc_out(pc_IF_ID_out),
+	.stall(stall)
+);
+
+////////////// DECODE STAGE /////////////////
+
+///// ID /////
+inst_decode i_decode_instn (
+	.instr(instr_IF_ID_out),
+	.imm(imm),
+	.opcode(opcode),
+	.func7(func7),
+	.func3(func3),
+	.rs1(rs1),
+	.rs2(rs2),
+	.rd(rd)
+);
+
+///// CU /////
+CU CU_inst (
+	.opcode(opcode),
+	.func7(func7),
+	.func3(func3),
+	.alu_op(alu_op),
+	.MR(MR),
+	.MW(MW),
+	.MemtoReg(MemtoReg),
+	.regWE(regWE),
+	.beq(beq),
+	.bneq(bneq),
+	.bge(bge),
+	.blt(blt),
+	.jmp(jmp),
+	.aluSrc(aluSrc),
+	.stall(stall)
+);
+
+///// regFile /////
+regFile regFile_inst (
+	.clk(clk),
+	.rst(rst),
+	.we(regWE_MEM_WB_out),
+	.rs1(rs1),
+	.rs2(rs2),
+	.rd(rd_MEM_WB_out),
+	.rout1(rout1),
+	.rout2(rout2),
+	.inp_data(reg_inp_data)
+);
+		
+
+///// ID_EX /////
+ID_EX ID_EX_inst (
+	.clk(clk),
+	.rst(rst),
+	.flush(flush),
+	.MR_in(MR),
+	.MW_in(MW),
+	.MemtoReg_in(MemtoReg),
+	.regWE_in(regWE),
+	.beq_in(beq),
+	.bneq_in(bneq),
+	.bge_in(bge),
+	.blt_in(blt),
+	.jmp_in(jmp),
+	.opcode_in(opcode),
+	.func7_in(func7),
+	.pc_in(pc_out),
+	.imm_in(imm),
+	.rout1_in(rout1),
+	.rout2_in(rout2),
+	//.reg_inp_data_in(reg_inp_data),
+	.func3_in(func3),
+	.rs1_in(rs1),
+	.rs2_in(rs2),
+	.rd_in(rd),
+	.aluSrc_in(aluSrc),
+	.alu_op_in(alu_op),
+	.MR_out(MR_ID_EX_out),
+	.MW_out(MW_ID_EX_out),
+	.MemtoReg_out(MemtoReg_ID_EX_out),
+	.regWE_out(regWE_ID_EX_out),
+	.beq_out(beq_ID_EX_out),
+	.bneq_out(bneq_ID_EX_out),
+	.bge_out(bge_ID_EX_out),
+	.blt_out(blt_ID_EX_out),
+	.jmp_out(jmp_ID_EX_out),
+	.opcode_out(opcode_ID_EX_out),
+	.func7_out(func7_ID_EX_out),
+	.pc_out(pc_ID_EX_out),
+	.imm_out(imm_ID_EX_out),
+	.rout1_out(rout1_ID_EX_out),
+	.rout2_out(rout2_ID_EX_out),
+	//.reg_inp_data_out(reg_inp_data_ID_EX_out),
+	.func3_out(func3_ID_EX_out),
+	.rs1_out(rs1_ID_EX_out),
+	.rs2_out(rs2_ID_EX_out),
+	.rd_out(rd_ID_EX_out),
+	.alu_op_out(alu_op_ID_EX_out),
+	.aluSrc_out(aluSrc_ID_EX_out)
+);
+
+HDU HDU_inst (
+	.rs1(rs1),
+	.rs2(rs2),
+	.rd(rd),
+	.MR(MR_ID_EX_out),
+	.stall(stall)
+);
+
+////////////// EXECUTE STAGE /////////////////
+
+///// ALU /////
+
+//muxing logic 
+assign B = (!aluSrc_ID_EX_out ) ? FU_MUX_B : imm_ID_EX_out;
+
+//Instantiation
+ALU alu_inst (
+	.alu_op(alu_op_ID_EX_out),
+	.A(FU_MUX_A),
+	.B(B),
+	.Result(Result)
+);
+
+assign branch_taken = ((beq_ID_EX_out && rout1_ID_EX_out == rout2_ID_EX_out)) 
+		       || ((bneq_ID_EX_out && rout1_ID_EX_out != rout2_ID_EX_out))
+		       || ((blt_ID_EX_out && $signed(rout1_ID_EX_out) < $signed(rout2_ID_EX_out)))
+		       || ((bge_ID_EX_out && $signed(rout1_ID_EX_out) > $signed(rout2_ID_EX_out)));
+
+///// flush /////
+flush flush_inst (
+	.branch_taken(branch_taken),
+	.jmp(jmp_ID_EX_out),
+	.flush(flush)
+);
+
+//PC branc cal
+assign target_branch = pc_ID_EX_out + imm_ID_EX_out;
+
+///// EX_MEM /////
+EX_MEM EX_MEM_inst (
+	.clk(clk),
+	.rst(rst),
+	.flush(flush),
+	.MR_in(MR_ID_EX_out),
+	.MW_in(MW_ID_EX_out),
+	.MemtoReg_in(MemtoReg_ID_EX_out),
+	.jmp_in(jmp_ID_EX_out),
+	.beq_in(beq_ID_EX_out),
+	.bneq_in(bneq_ID_EX_out),
+	.bge_in(bge_ID_EX_out),
+	.blt_in(blt_ID_EX_out),
+	.regWE_in(regWE_ID_EX_out),
+	.rd_in(rd_ID_EX_out),
+	.alu_result_in(Result),
+	.rout2_in(FU_MUX_B),
+	//.reg_inp_data_in(reg_inp_data_ID_EX_out),
+	.pc_in(pc_ID_EX_out),
+	.MR_out(MR_EX_MEM_out),
+	.MW_out(MW_EX_MEM_out),
+	.MemtoReg_out(MemtoReg_EX_MEM_out),
+	.jmp_out(jmp_EX_MEM_out),
+	.beq_out(beq_EX_MEM_out),
+	.bneq_out(bneq_EX_MEM_out),
+	.blt_out(blt_EX_MEM_out),
+	.bge_out(bge_EX_MEM_out),
+	.regWE_out(regWE_EX_MEM_out),
+	.rd_out(rd_EX_MEM_out),
+	.alu_result_out(alu_result_EX_MEM_out),
+	.rout2_out(rout2_EX_MEM_out),
+	//.reg_inp_data_out(reg_inp_data_EX_MEM_out),
+	.pc_out(pc_EX_MEM_out)
+);
+
+
+////////////// MEMORY STAGE /////////////////
+
+///// data_mem /////
+data_mem data_mem_inst (
+	.clk(clk),
+	.data(rout2_EX_MEM_out),
+	.addrs(alu_result_EX_MEM_out),
+	.we(MW_EX_MEM_out),
+	.re(MR_EX_MEM_out),
+	.data_out(read_mem_data)
+);
+
+///// MEM_WB /////
+MEM_WB MEM_WB_inst (
+	.clk(clk),
+	.rst(rst),
+	.MemtoReg_in(MemtoReg_EX_MEM_out),
+	.jmp_in(jmp_EX_MEM_out),
+	.regWE_in(regWE_EX_MEM_out),
+	.rd_in(rd_EX_MEM_out),
+	.alu_result_in(alu_result_EX_MEM_out),
+	//.reg_inp_data_in(reg_inp_data_EX_MEM_out),
+	.read_mem_data_in(read_mem_data),
+	.pc_in(pc_EX_MEM_out),
+	.MemtoReg_out(MemtoReg_MEM_WB_out),
+	.jmp_out(jmp_MEM_WB_out),
+	.regWE_out(regWE_MEM_WB_out),
+	.rd_out(rd_MEM_WB_out),
+	.alu_result_out(alu_result_MEM_WB_out),
+	//.reg_inp_data_out(reg_inp_data_MEM_WB_out),
+	.read_mem_data_out(read_mem_data_MEM_WB_out),
+	.pc_out(pc_MEM_WB_out)
+	
+);
+
+////////////// Write Back STAGE /////////////////
+
+///// WB muxing /////
+assign reg_inp_data = (jmp_MEM_WB_out) ? pc_MEM_WB_out : 
+					 (MemtoReg_MEM_WB_out) ? read_mem_data_MEM_WB_out : 
+					  alu_result_MEM_WB_out;
+
+//pls just kill me alr...i am tired of fixing LW and SW, this is my last hope 
+// Fowarding Unit
+forwardingUnit FU_inst (
+	.rs1(rs1_ID_EX_out),
+	.rs2(rs2_ID_EX_out),
+	.rd_EX_MEM(rd_EX_MEM_out),
+	.rd_MEM_WB(rd_MEM_WB_out),
+	.regWE_EX_MEM(regWE_EX_MEM_out), 
+	.regWE_MEM_WB(regWE_MEM_WB_out),
+	.Forward_A(forward_A),
+	.Forward_B(forward_B)
+);
+
+//FU MUXES ADN THEIR LOGIC
+assign FU_MUX_A = (forward_A == 2'b10) ? alu_result_EX_MEM_out:
+		  (forward_A == 2'b01) ? reg_inp_data:
+		   rout1_ID_EX_out;
+
+assign FU_MUX_B = (forward_B == 2'b10) ? alu_result_EX_MEM_out:
+		  (forward_B == 2'b01) ? reg_inp_data:
+		   rout2_ID_EX_out;
+	
+//Debug
+always@(posedge clk) begin
+if(regWE_MEM_WB_out)
+$display("Writing to REG[%0d] = %h", rd_MEM_WB_out, reg_inp_data);
+if(MW_EX_MEM_out)
+$display("Writing to MEM[%0d] = %h", alu_result_EX_MEM_out, rout2_EX_MEM_out);
+end
+
+endmodule
+
+
+
+
+module regFile(rout1, rout2, rs1, rs2, rd, inp_data, clk, rst, we);
+
+output [31:0] rout1, rout2;
+
+input [4:0] rd, rs1, rs2;
+input [31:0] inp_data;
+input clk, rst, we;
+
+reg [31:0] regMem [0:31];
+
+integer i;
+
+initial begin
+for(i = 0; i < 31; i=i+1) begin
+regMem[i] = 32'd0;
+end
+end
+
+always@(posedge clk or posedge rst) begin
+if(rst) begin
+
+for(i = 0; i <= 31; i=i+1) begin
+regMem[i] <= 0;
+	end
+end
+else if(we && (rd != 0)) begin
+regMem[rd] <= inp_data;
+$display("Data written in REG: %h at reg# %h", inp_data, rd);
+end
+end
+
+assign rout1 = (rs1 != 0) ? regMem[rs1] : 0;
+assign rout2 = (rs2 != 0) ? regMem[rs2] : 0;
+
+endmodule
+
+
+
+
+
+module PC(clk, rst, stall, pc_in, pc_out);
+
+output  reg [31:0] pc_out;
+input [31:0] pc_in;
+input clk, rst, stall;
+
+initial 
+pc_out <= 0;
+
+always @(posedge clk or posedge rst) begin
+if(rst) 
+pc_out <= 0 ;
+else if(!stall)
+pc_out <= pc_in;	
+end
+endmodule
+
+
+
+module MEM_WB (
+
+input clk, rst, MemtoReg_in, jmp_in, regWE_in,
+input [4:0] rd_in,
+input [31:0] alu_result_in, read_mem_data_in, pc_in,
+
+output reg MemtoReg_out, jmp_out, regWE_out,
+output reg [4:0] rd_out,
+output reg [31:0] alu_result_out, read_mem_data_out, pc_out
+);
+
+always@(posedge clk or posedge rst) begin
+if(rst) begin
+	 MemtoReg_out <= 0;
+	 regWE_out <= 0;
+	 jmp_out <= 0;
+	 rd_out <= 0; 
+	 alu_result_out <= 0; 
+         read_mem_data_out <= 0;
+	 pc_out <= 0;
+end
+
+else begin
+	 MemtoReg_out <= MemtoReg_in;
+	 jmp_out <= jmp_in;
+	 regWE_out <= regWE_in;
+	 rd_out <= rd_in; 
+	 alu_result_out <= alu_result_in; 
+	 read_mem_data_out <= read_mem_data_in;
+	 pc_out <= pc_in;
+     end 
+  end
+endmodule
+
+
+
+
+module i_mem(instr, PC);
+
+output reg [31:0] instr;
+input [31:0] PC;
+//input clk,rst;
+
+reg [31:0]mem[0:2**22-1];
+
+
+
+//parameter Instr_path = "C:/Users/AK TECHNOLOGY/OneDrive/Documents/inst_C.hex";
+
+initial begin
+//$readmemh(Instr_path, mem);
+	
+      mem[0]  = 32'h00500113;	//ADDI x2, x0, 5
+	//mem[1]  = 32'h00000033; //ADDI, x0, x0, 0;
+	//mem[2]  = 32'h00000033; //ADDI, x0, x0, 0;
+  mem[1]  = 32'h00212223;	//SW x2, 4(x2)
+	//mem[2]  = 32'h00000033; //ADDI, x0, x0, 0;
+	//mem[3]  = 32'h00000033; //ADDI, x0, x0, 0;
+	mem[2]  = 32'h00412183; //LW x3, 4(x2)
+
+ $display("Instruction memory initialized with test program");
+end
+
+always@(*) 
+begin
+
+//if(rst) begin
+//instr <= 32'b0;
+//PC   <= 10'd0;
+//end
+
+ 
+//instr <= {mem[PC+3], mem[PC+2], mem[PC+1], mem[PC]};
+instr <= mem[PC[31:2]];
+
+
+
+end
+endmodule
+
+
+
+
+
+module IF_ID(clk, rst, stall, flush, instr_in, pc_in, instr_out, pc_out);
+input clk, rst, flush, stall;
+input [31:0] instr_in, pc_in;
+output reg [31:0] instr_out, pc_out;
+
+
+always@(posedge clk or posedge rst)
+begin
+
+if(rst || flush) begin
+	pc_out <= 0; 
+	instr_out <= 0;
+end
+
+else if(!stall) begin
+	pc_out <= pc_in;
+	instr_out <= instr_in;
+end
+
+end
+endmodule
+
+module ID_EX(
+
+input clk, rst, flush, MR_in, MW_in, MemtoReg_in, regWE_in, beq_in, bneq_in, bge_in, blt_in, jmp_in, aluSrc_in,
+input [6:0] opcode_in, func7_in,
+input [31:0] pc_in, imm_in, rout1_in, rout2_in, 
+input [2:0] func3_in,
+input [4:0] rs1_in, rs2_in, rd_in,
+input [3:0] alu_op_in,
+
+
+output reg MR_out, MW_out, MemtoReg_out, regWE_out, beq_out, bneq_out, bge_out, blt_out, jmp_out, aluSrc_out,
+output reg [6:0] opcode_out, func7_out,
+output reg [31:0] pc_out, imm_out, rout1_out, rout2_out, 
+output reg [2:0] func3_out,
+output reg [4:0] rs1_out, rs2_out, rd_out,
+output reg [3:0] alu_op_out
+);
+
+
+always@(posedge clk or posedge rst) begin
+if(rst || flush) begin
+	MR_out <= 0;
+	MW_out <= 0;
+	MemtoReg_out <= 0;
+	regWE_out  <= 0;
+	beq_out  <= 0;
+	bneq_out <= 0;
+	bge_out  <= 0;
+	blt_out  <= 0;
+	jmp_out  <= 0;
+	opcode_out <= 0;
+	func7_out  <= 0;
+	pc_out    <= 0;
+	imm_out   <= 0;
+	rout1_out <= 0;
+	rout2_out <= 0;
+	func3_out <= 0;
+	rs1_out <= 0;
+	rs2_out <= 0;
+	rd_out  <= 0;
+	alu_op_out <= 0;
+	aluSrc_out <= 0;
+end
+
+else begin
+
+
+	MR_out <= MR_in;
+	MW_out <= MW_in;
+	MemtoReg_out <= MemtoReg_in;
+	regWE_out  <= regWE_in;
+	beq_out  <= beq_in;
+	bneq_out <= bneq_in;
+	bge_out  <= bge_in;
+	blt_out  <= blt_in;
+	jmp_out  <= jmp_in;
+	opcode_out <= opcode_in;
+	func7_out  <= func7_in;
+	pc_out    <= pc_in;
+	imm_out   <= imm_in;
+	rout1_out <= rout1_in;
+	rout2_out <= rout2_in;
+	func3_out <= func3_in;
+	rs1_out <= rs1_in;
+	rs2_out <= rs2_in;
+	rd_out  <= rd_in;
+	alu_op_out <= alu_op_in;
+	aluSrc_out <= aluSrc_in;
+end
+end
+endmodule
+
+
+
+
+
+module forwardingUnit(rs1, rs2, rd_EX_MEM, rd_MEM_WB, regWE_EX_MEM, regWE_MEM_WB, Forward_A, Forward_B);
+
+input [4:0] rs1, rs2, rd_EX_MEM, rd_MEM_WB;
+input regWE_EX_MEM, regWE_MEM_WB;
+output reg [1:0] Forward_A, Forward_B;
+
+always@(*) begin
+//Default
+Forward_A = 2'b00;
+Forward_B = 2'b00;
+
+
+if(regWE_EX_MEM & (rd_EX_MEM == rs1))
+Forward_A = 2'b10;
+else if(regWE_MEM_WB & (rd_MEM_WB == rs1))
+Forward_A = 2'b01;
+else 
+Forward_A = 2'b00;
+
+
+if(regWE_EX_MEM & (rd_EX_MEM == rs2))
+Forward_B = 2'b10;
+else if(regWE_MEM_WB & (rd_MEM_WB == rs2))
+Forward_B = 2'b01;
+else 
+Forward_B = 2'b00;
+end
+endmodule
+
+
+
+
+module HDU(rs1, rs2, rd, MR, stall);
+
+input [4:0] rs1, rs2, rd;
+input MR;
+output reg stall;
+
+always @(*) begin
+if(MR && ((rd == rs1) || (rd == rs2)))
+stall <= 1'b1;
+else 
+stall <= 1'b0;
+end
+endmodule
+
+
+module EX_MEM (
+
+input clk, rst, flush, MR_in, MW_in, MemtoReg_in, jmp_in, beq_in, bneq_in, bge_in, blt_in, regWE_in,
+input [4:0] rd_in,		//destination reg index for WB stage
+input [31:0] alu_result_in, rout2_in, pc_in,
+
+output reg MR_out, MW_out, MemtoReg_out, jmp_out, beq_out, bneq_out, bge_out, blt_out, regWE_out,
+output reg [4:0] rd_out,
+output reg [31:0] alu_result_out, rout2_out, pc_out
+);
+
+always@(posedge clk or posedge rst) begin
+if(rst || flush) begin
+	MR_out <= 0;
+	MW_out <= 0;
+	MemtoReg_out <= 0;
+	jmp_out <= 0;
+	beq_out <= 0;
+	bneq_out <= 0;
+	bge_out <= 0;
+	blt_out <= 0;
+	regWE_out <= 0;
+	rd_out <= 0;
+	alu_result_out <= 0;
+	rout2_out <= 0;
+	pc_out <= 0;
+end
+
+else begin
+	MR_out <= MR_in;
+	MW_out <= MW_in;
+	MemtoReg_out <= MemtoReg_in;
+	jmp_out <= jmp_in;
+	beq_out <= beq_in;
+	bneq_out <= bneq_in;
+	bge_out <= bge_in;
+	blt_out <= blt_in;
+	regWE_out <= regWE_in;
+	rd_out <= rd_in;
+	alu_result_out <= alu_result_in;
+	rout2_out <= rout2_in; 
+	pc_out <= pc_in;
+     end
+end
+endmodule
+
+
+
+module data_mem(data_out,data,addrs,we,re,clk);
+
+input [31:0]data;
+input [31:0]addrs;
+input clk,we,re;
+output reg [31:0] data_out;
+
+reg [31:0]data_mem[0:2**13-1];
+
+integer i;
+initial begin
+for(i = 0; i < 2**13; i=i+1) begin
+data_mem[i] = 32'd0;
+end
+end
+
+//Read op wont be in clk as it will cause time delay in instr of both Read mem and write reg 
+always@(*) begin
+if(re)
+data_out <= data_mem[addrs[31:2]];
+else 
+data_out <= 32'd0;
+end
+always@(posedge clk)
+begin
+
+//if(re)
+//data_out <= data_mem[addrs[31:2]];
+
+ if(we) begin
+data_mem[addrs[31:2]] <= data;
+//for debug
+$display("Data written in mem: addrs:%h, data: %h", addrs, data);
+end
+end
+endmodule
+
+
+
+
+module CU (stall, alu_op,MR,MW,jmp/*regSEL,immSEL*/,regWE,/*inst,pcSEL,rs1SEL,rs2SEL,clk,rst,*/beq, bneq, bge, blt, opcode, func3, func7, MemtoReg, aluSrc);
+
+//input [31:0]inst;
+input [6:0] opcode, func7;
+input [2:0] func3;
+input stall;
+//input clk,rst;
+
+//output reg[4:0] regSEL, rs1SEL, rs2SEL;
+output reg[3:0]alu_op;
+output reg MR, MW, regWE,beq, bneq, bge, blt, jmp/*pcSEL, regSEL, rs1SEL, rs2SEL*/, MemtoReg,aluSrc;
+//output reg [2:0] immSEL;
+
+/*wire [6:0]opcode,func7;
+wire [2:0] func3;
+
+assign opcode = inst[6:0];
+assign func3 = inst[14:12];
+assign func7 = inst[31:25];*/
+
+initial
+begin
+	alu_op = 4'b0000;
+		//func3 = 3'b000;
+	MR = 1'b0;
+	MW = 1'b0;
+	beq  = 1'b0;
+	bneq = 1'b0;
+	bge  = 1'b0;
+	blt  = 1'b0; 	
+	jmp  = 1'b0;
+	MemtoReg = 1'b0;
+end
+
+always @(*)
+begin
+case(opcode) 
+
+// R TYPE INSTRUCTIONS
+7'b0110011:
+case(func3)
+3'b0: begin 
+if(func7==7'b0000000) begin	//ADD	
+alu_op <= 4'b0000;
+regWE  <= 1'b1;
+//MemtoReg <= 1'b0;
+MR <= 1'b0;
+MW <= 1'b0;  end 
+
+else if(func7==7'b0000010) begin	//SUB	
+alu_op <= 4'b0001;
+regWE  <= 1'b1;
+//MemtoReg <= 1'b0;
+MR <= 1'b0;
+MW <= 1'b0;  end 
+
+end
+3'b100: begin //XOR
+alu_op <= 4'b0110;
+regWE  <= 1'b1;
+//MemtoReg <= 1'b0;
+MR <= 1'b0;
+MW <= 1'b0;
+end
+3'b110: begin //OR
+alu_op <= 4'b0101;
+regWE  <= 1'b1;
+//MemtoReg <= 1'b0;
+MR <= 1'b0;
+MW <= 1'b0; 
+end
+3'b111: begin //AND
+alu_op <= 4'b0100;
+regWE  <= 1'b1;
+//MemtoReg <= 1'b0;
+MR <= 1'b0;
+MW <= 1'b0;
+end
+3'b001: begin //SLL
+alu_op <= 4'b0111;
+regWE  <= 1'b1;
+//MemtoReg <= 1'b0;
+MR <= 1'b0;
+MW <= 1'b0;
+end
+3'b101: begin //SRL
+alu_op <= 4'b1000;
+regWE  <= 1'b1;
+//MemtoReg <= 1'b0;
+MR <= 1'b0;
+MW <= 1'b0;
+end
+/*3'b110: begin //XOR
+alu_op <= 4'b0000;
+regWE  <= 1'b1;
+MemtoReg <= 1'b0;
+MR <= 1'b0;
+MW <= 1'b0;
+end*/
+endcase// end of case3
+
+//B TYPE INSTRUCTIONS
+7'b1100011: 
+case(func3) 
+3'b0: begin // BEQ
+alu_op <= 4'b1001;
+regWE  <= 1'b0;
+//MemtoReg <= 1'bx;
+MR <= 1'b0;
+MW <= 1'b0;
+	beq  = 1'b1;
+	bneq = 1'b0;
+	bge  = 1'b0;
+	blt  = 1'b0;
+end
+3'b001: begin // BNEQ
+alu_op <= 4'b1001;
+regWE  <= 1'b0;
+//MemtoReg <= 1'bx;
+MR <= 1'b0;
+MW <= 1'b0;
+	beq  = 1'b0;
+	bneq = 1'b1;
+	bge  = 1'b0;
+	blt  = 1'b0;
+end
+3'b100: begin //BLT
+alu_op <= 4'b1010;
+regWE  <= 1'b0;
+//MemtoReg <= 1'bx;
+MR <= 1'b0;
+MW <= 1'b0;
+	beq  = 1'b0;
+	bneq = 1'b0;
+	bge  = 1'b0;
+	blt  = 1'b1;
+end
+3'b101: begin //BGE
+alu_op <= 4'b1011;
+regWE  <= 1'b0;
+//MemtoReg <= 1'bx;
+MR <= 1'b0;
+MW <= 1'b0;
+	beq  = 1'b0;
+	bneq = 1'b0;
+	bge  = 1'b1;
+	blt  = 1'b0;
+end
+endcase //end of case func3
+
+//I TYPE INSTRCTIONS
+7'b1100111:
+case(func3)
+3'b0: begin		//jalr
+alu_op <= 4'b0000;
+regWE  <= 1'b1;
+jmp <= 1'b1;
+MR <= 1'b0;
+MW <= 1'b0;
+end
+endcase //end of case func3
+
+7'b0010011: begin
+aluSrc <= 1'b1;
+case(func3)
+3'b0: begin	//ADDI
+alu_op <= 4'b0000;
+regWE  <= 1'b1;
+MR <= 1'b0;
+MW <= 1'b0;
+end
+
+3'b100: begin	//XORI
+alu_op <= 4'b0110;
+regWE  <= 1'b1;
+MR <= 1'b0;
+MW <= 1'b0;
+end
+
+3'b110: begin	//OR_I
+alu_op <= 4'b0101;
+regWE  <= 1'b1;
+MR <= 1'b0;
+MW <= 1'b0;
+end
+
+3'b111: begin	//AND_I
+alu_op <= 4'b0100;
+regWE  <= 1'b1;
+MR <= 1'b0;
+MW <= 1'b0;
+end
+
+3'b001: begin    // SLL_I
+alu_op <= 4'b0111;
+regWE  <= 1'b1;
+MR <= 1'b0;
+MW <= 1'b0;
+end
+
+3'b101: begin	//SRL_I
+alu_op <= 4'b1000;
+regWE  <= 1'b1;
+MR <= 1'b0;
+MW <= 1'b0;
+end
+
+3'b010: begin	//SLT_I
+alu_op <= 4'b1110;
+regWE  <= 1'b1;
+MR <= 1'b0;
+MW <= 1'b0;
+end
+endcase //end of case func3
+end
+
+7'b0000011: begin
+aluSrc <= 1'b1;
+case(func3)
+3'b0: begin	//LB
+alu_op <= 4'b0000;
+regWE  <= 1'b1;
+MemtoReg <= 1'b1;
+MR <= 1'b1;
+MW <= 1'b0;
+end
+
+3'b001: begin	//LH
+alu_op <= 4'b0000;
+regWE  <= 1'b1;
+MemtoReg <= 1'b1;
+MR <= 1'b1;
+MW <= 1'b0;
+end
+
+3'b010: begin	//LW
+alu_op <= 4'b0000;
+regWE  <= 1'b1;
+MemtoReg <= 1'b1;
+MR <= 1'b1;
+MW <= 1'b0;
+end
+endcase //end of case func3
+end
+
+
+//S TYPE INSTRUCTIONS
+7'b0100011: begin
+aluSrc <= 1'b1;
+case(func3)
+3'b0: begin	//SB
+alu_op <= 4'b0000;
+regWE  <= 1'b0;
+MR <= 1'b0;
+MW <= 1'b1;
+end
+
+3'b001: begin	//SH
+alu_op <= 4'b0000;
+regWE  <= 1'b0;
+MR <= 1'b0;
+MW <= 1'b1;
+end
+
+3'b010: begin	//SW
+alu_op <= 4'b0000;
+regWE  <= 1'b0;
+MR <= 1'b0;
+MW <= 1'b1;
+end
+endcase //end of case func3
+end
+
+
+
+//J TYPE INSTRUCTION
+7'b1101111: 	begin  //JAL
+alu_op <= 4'b0000;
+regWE  <= 1'b1;
+jmp <= 1'b1;
+MR <= 1'b0;
+MW <= 1'b0;
+end
+
+
+
+//U TYPE INSTRUCTION
+7'b0110111: begin 	//LUI
+alu_op <= 4'b0000;
+regWE  <= 1'b1;
+MR <= 1'b0;
+MW <= 1'b0;
+end
+endcase //end of case opcode
+
+if(stall) begin
+	alu_op = 4'b0000;
+ 	MR = 1'b0;
+	MW = 1'b0;
+	regWE = 1'b0;
+	beq = 1'b0;
+	bneq = 1'b0;
+	bge = 1'b0;
+	blt = 1'b0;
+	jmp = 1'b0;
+	MemtoReg = 1'b0;
+	aluSrc = 1'b0;
+end
+
+
+end //end of always
+endmodule
+
+
+
+module ALU (Result, A, B, alu_op);
+
+output reg [31:0] Result;
+input [31:0] A,B;
+/*input clk;
+input rst;*/
+input [3:0] alu_op;
+
+//Signed Vars
+wire signed A_signed = A;
+wire signed B_signed = B;
+
+//FLAGS
+wire ZF;
+
+always@(*)
+begin
+/*if (rst) begin
+	Result <= 32'b0;
+end
+else begin*/
+case(alu_op)
+	//ADDITION OP
+	4'b0000: Result <= A + B;
+	//SUBTRACTION OP
+	4'b0001: Result <= A - B;
+	//MULTIPLICATION OP
+	4'b0010: Result <= A * B;
+	//DIVISION OP
+	4'b0011: Result <= A / B;
+	//AND op
+	4'b0100: Result <= A & B;
+	//OR op
+	4'b0101: Result <= A | B;
+	//XOR op
+	4'b0110: Result <= A ^ B;
+	//SLL unsigned
+	4'b0111: Result <= A << B[4:0];
+	//SLR unsigned
+	4'b1000: Result <= A >> B[4:0];
+	//EQUAL check
+	4'b1001: Result <= (A==B) ? 1:0;
+	//LESS than (unsigned)
+	4'b1010: Result <= (A<B) ? 1:0;
+	//GREATER than or EQUALS to (unsigned)
+	4'b1011: Result <= (A>=B)? 1:0;
+	//JALR with alignment 
+	4'b1100: Result <= (A+B) & 32'hFFFFFFFE;
+	//SLR signed
+	4'b1101: Result <= A_signed >>> B_signed;
+	//Less than (signed)
+	4'b1110: Result <= (A_signed < B_signed) ? 1:0;
+	//Greater than or EQUALS to (signed)
+	4'b1111: Result <= A_signed >= B_signed ? 1:0;
+default: Result <= 32'b0;
+endcase
+end
+
+
+assign ZF = ~(Result&Result);
+
+endmodule
+
+
