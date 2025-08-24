@@ -1,1 +1,31 @@
-
+run
+# rs1 is: 00010
+run
+# rs1 is: 00010
+run
+run
+# Writing to REG[2] = ffffffe0
+# Writing to MEM[4294967292] = 00000000
+run
+# Writing to MEM[4294967288] = 00000000
+# rs1 is: 01000
+run
+run
+# Writing to REG[8] = 00000020
+# rs1 is: 01000
+run
+# Writing to REG[15] = 00000005
+# Writing to MEM[12] = 00000005
+run
+run
+# Writing to REG[15] = 00000007
+# Writing to MEM[8] = 00000007
+# Data read from mem: addrs:0000000c, data: 00000000
+# Data read from mem: addrs:0000000c, data: 00000005
+run
+# Data read from mem: addrs:00000008, data: 00000005
+# Data read from mem: addrs:00000008, data: 00000007
+run
+# Writing to REG[14] = 00000005
+run
+# Writing to REG[15] = 00000007
