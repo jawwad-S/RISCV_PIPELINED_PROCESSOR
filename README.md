@@ -1,5 +1,9 @@
 # RISCV PIPELINED PROCESSOR
 
+<img width="1129" height="370" alt="PROCESSR_blk_1" src="https://github.com/user-attachments/assets/6f751c8a-7429-41b5-8a78-4308a442bec2" />
+
+
+
 ## Overview:
 
 This project implements a **5-stage pipelined RISC-V Processor (RV32I)** in Verilog HDL. The processor supports a wide range of instructions from the RV32I instruction set, including I-type, R-type, S-type, B-type, J-type, and U-type (LUI only). It features a **fully functional forwarding unit and hazard detection unit (HDU)** to handle data hazards and control hazards efficiently.
