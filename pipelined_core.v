@@ -76,7 +76,7 @@ wire [31:0] target_branch;
 
 //PC muxing logic
 //assign pc_in = pc_out + 4;
-assign pc_in = (jalr_ID_EX_out) ? ((pc_out + rout1_ID_EX_out) & ~32'b1)
+	assign pc_in = (jalr_ID_EX_out) ? ((imm_ID_EX_out + rout1_ID_EX_out) & ~32'b1)
 		:(branch_taken || jmp_ID_EX_out) ? target_branch : pc_out + 4;
 
 //PC
@@ -358,5 +358,6 @@ $display("Writing to MEM[%0d] = %h", alu_result_EX_MEM_out, rout2_EX_MEM_out);
 end
 
 endmodule
+
 
 
